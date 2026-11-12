@@ -141,12 +141,19 @@ await runBars({
       const closeNum = close === null ? null : Number(close) / 1e5;
       if (held !== undefined) {
         book.heldBars++;
+        // The take-profit and stop-loss need the entry fill price; the
+        // dead-trade exit does not, so a position whose buy fill was never
+        // reported still gets closed after 240 bars instead of being held
+        // to the window's flatten.
+        const deadTrade = book.heldBars >= MAX_HOLD_BARS;
+        let hitTarget = false;
         if (book.entryPx !== null && closeNum !== null) {
           const tp = book.entryPx * (1 + TP_BPS / 10000);
           const sl = book.entryPx * (1 - SL_BPS / 10000);
-          if (closeNum >= tp || closeNum <= sl || book.heldBars >= MAX_HOLD_BARS) {
-            sells.push({ side: 'sell', symbol, qty: held.qty, max_slippage_bps: MAX_SLIPPAGE_BPS });
-          }
+          hitTarget = closeNum >= tp || closeNum <= sl;
+        }
+        if (deadTrade || hitTarget) {
+          sells.push({ side: 'sell', symbol, qty: held.qty, max_slippage_bps: MAX_SLIPPAGE_BPS });
         }
         continue;
       }
